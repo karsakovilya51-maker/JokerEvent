@@ -1,7 +1,9 @@
+import os
 import asyncio
 import logging
 from datetime import datetime, timedelta
 
+from aiohttp import web
 from aiogram import Bot, Dispatcher, F
 from aiogram.enums import ParseMode, ChatMemberStatus
 from aiogram.filters import CommandStart, CommandObject
@@ -17,6 +19,10 @@ logging.basicConfig(level=logging.INFO)
 bot = Bot(token=config.BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
 scheduler = AsyncIOScheduler()
+
+# Обработчик для проверки состояния сервиса на Render (Health Check)
+async def handle_health_check(request):
+    return web.Response(text="Bot is running OK")
 
 async def is_user_subscribed(user_id: int) -> bool:
     try:
@@ -86,7 +92,7 @@ async def process_category_selection(callback: CallbackQuery):
     }
 
     selected_text = events_info.get(category, events_info["all"])
-
+    
     text = (
         f"{selected_text}\n\n"
         "🎟 <b>Обычный билет:</b> 1200 ₽\n"
@@ -120,6 +126,15 @@ async def process_buy(callback: CallbackQuery):
     await callback.answer()
 
 async def main():
+    # Запуск легкого веб-сервера для закрытия порта на Render
+    app = web.Application()
+    app.router.add_get('/', handle_health_check)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.getenv("PORT", 8080))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+
     scheduler.start()
     logging.info("Бот успешно запущен!")
     await dp.start_polling(bot)
