@@ -5,7 +5,7 @@ def get_subscription_keyboard(channel_url: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="1. Подписаться на канал 📢", url=channel_url)],
-            [InlineKeyboardButton(text="2. Забрать скидку 🎁", callback_data="check_subscription")]
+            [InlineKeyboardButton(text="2. 🎰 Испытать удачу в лотерее", callback_data="spin_slots")]
         ]
     )
 
