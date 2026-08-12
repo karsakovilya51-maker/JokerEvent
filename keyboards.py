@@ -11,13 +11,34 @@ def get_start_keyboard():
 
 
 def get_categories_keyboard():
-    """Главное меню с мероприятиями и кнопкой подписки на канал"""
+    """Главное меню с мероприятиями, оракулом и подпиской"""
     builder = InlineKeyboardBuilder()
     builder.button(text="🕵️‍♂️ Мафия Чикаго 30-х", callback_data="category_mafia")
     builder.button(text="🧠 Что? Где? Когда?", callback_data="category_chgk")
     builder.button(text="🎬 Лекция / Кино", callback_data="category_lecture_movie")
     builder.button(text="💘 Скоростные свидания (10 девушек за 1 час)", callback_data="category_speed_dating")
+    builder.button(text="🔮 Предсказание оракула", callback_data="oracle_start")
     builder.button(text="📢 Подписаться на канал", url=config.CHANNEL_URL)
+    builder.button(text="🏠 Главное меню", callback_data="main_menu")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def get_oracle_cards_keyboard():
+    """Клавиатура выбора 1 из 3 карт оракула"""
+    builder = InlineKeyboardBuilder()
+    builder.button(text="🎴 Карта 1", callback_data="oracle_card_1")
+    builder.button(text="🎴 Карта 2", callback_data="oracle_card_2")
+    builder.button(text="🎴 Карта 3", callback_data="oracle_card_3")
+    builder.button(text="🏠 Главное меню", callback_data="main_menu")
+    builder.adjust(3, 1)  # Три карты в ряд, кнопка меню снизу
+    return builder.as_markup()
+
+
+def get_oracle_result_keyboard():
+    """Клавиатура после выдачи предсказания"""
+    builder = InlineKeyboardBuilder()
+    builder.button(text="🔮 Выбрать другую карту", callback_data="oracle_start")
     builder.button(text="🏠 Главное меню", callback_data="main_menu")
     builder.adjust(1)
     return builder.as_markup()
