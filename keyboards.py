@@ -1,4 +1,9 @@
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import (
+    InlineKeyboardMarkup, 
+    InlineKeyboardButton, 
+    ReplyKeyboardMarkup, 
+    KeyboardButton
+)
 import config
 
 def get_subscription_keyboard(channel_url: str) -> InlineKeyboardMarkup:
@@ -36,6 +41,29 @@ def get_booking_keyboard(category: str) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(
                     text="❓ Задать вопрос организатору", 
                     url=support_url
+                )
+            ]
+        ]
+    )
+
+# Клавиатура для быстрой отправки номера телефона в 1 клик
+def get_phone_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="📱 Поделиться номером телефона", request_contact=True)]
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=True
+    )
+
+# Кнопка перехода в ЛС к организатору @PravovedVayur
+def get_organizer_redirect_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="💬 Написать организатору (@PravovedVayur)", 
+                    url="https://t.me/PravovedVayur"
                 )
             ]
         ]
