@@ -127,7 +127,6 @@ async def buy_handler(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
     category = callback.data.split("_")[1]
     
-    # Сохраняем выбранную категорию в FSM
     await state.update_data(category=category)
     await state.set_state(BookingForm.waiting_for_phone)
     
@@ -141,7 +140,6 @@ async def buy_handler(callback: types.CallbackQuery, state: FSMContext):
 
 @dp.message(BookingForm.waiting_for_phone)
 async def process_phone_step(message: types.Message, state: FSMContext):
-    # Получаем телефон из кнопки контакта или из текстового сообщения
     if message.contact:
         phone = message.contact.phone_number
     else:
@@ -151,28 +149,38 @@ async def process_phone_step(message: types.Message, state: FSMContext):
     category = user_data.get("category", "Не указана")
     await state.clear()
 
-    # 1. Отправляем уведомление организатору (ADMIN_ID)
-    if config.ADMIN_ID:
-        try:
-            username_str = f"@{message.from_user.username}" if message.from_user.username else "без username"
-            admin_text = (
-                f"🔥 **НОВЫЙ ГОСТЬ И ЗАЯВКА НА БРОНЬ!**\n\n"
-                f"👤 **Гость:** {message.from_user.full_name} ({username_str})\n"
-                f"📞 **Телефон:** `{phone}`\n"
-                f"🎯 **Категория:** {category}"
-            )
-            await bot.send_message(chat_id=config.ADMIN_ID, text=admin_text, parse_mode=ParseMode.MARKDOWN)
-        except Exception as e:
-            logging.error(f"Ошибка отправки сообщения организатору: {e}")
+    # Текст заявки для рабочего чата
+    username_str = f"@{message.from_user.username}" if message.from_user.username else "без username"
+    lead_text = (
+        f"🔥 **НОВЫЙ ГОСТЬ И ЗАЯВКА НА БРОНЬ!**\n\n"
+        f"👤 **Гость:** {message.from_user.full_name} ({username_str})\n"
+        f"📞 **Телефон:** `{phone}`\n"
+        f"🎯 **Категория:** {category}"
+    )
 
-    # 2. Убираем кнопкой клавиатуру ввода телефона
+    # 1. Отправляем карточку лида в рабочий чат (по CHANNEL_ID)
+    target_chat = config.CHANNEL_ID or config.ADMIN_ID
+    if target_chat:
+        try:
+            await bot.send_message(chat_id=target_chat, text=lead_text, parse_mode=ParseMode.MARKDOWN)
+        except Exception as e:
+            logging.error(f"Ошибка отправки лида в рабочий чат: {e}")
+
+    # 2. Если ADMIN_ID задан и отличается от группы, дублируем сообщение админу
+    if config.ADMIN_ID and str(config.ADMIN_ID) != str(config.CHANNEL_ID):
+        try:
+            await bot.send_message(chat_id=config.ADMIN_ID, text=lead_text, parse_mode=ParseMode.MARKDOWN)
+        except Exception as e:
+            logging.error(f"Ошибка отправки лида администратору: {e}")
+
+    # 3. Убираем клавиатуру ввода телефона
     remove_msg = await message.answer("...", reply_markup=ReplyKeyboardRemove())
     await remove_msg.delete()
 
-    # 3. Инструкция для пользователя
+    # 4. Сообщение гостю с перенаправлением в рабочий чат
     user_text = (
         "✅ **Заявка зарегистрирована!**\n\n"
-        "Перейдите в личные сообщения к организатору и напишите ему:\n"
+        "Перейдите в рабочий чат проекта и напишите организатору:\n"
         "👉 **«Хочу забронировать место»**"
     )
     await message.answer(
