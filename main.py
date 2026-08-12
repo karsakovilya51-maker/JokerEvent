@@ -1,5 +1,6 @@
 import os
 import time
+import random
 import asyncio
 import logging
 from aiohttp import web
@@ -29,6 +30,20 @@ CATEGORY_NAMES = {
     "lecture_movie": "Лекция / Кино",
     "speed_dating": "Скоростные свидания (10 девушек за 1 час)",
 }
+
+# Список предсказаний Оракула
+ORACLE_PREDICTIONS = [
+    "✨ **Сегодня вы встретите человека, который поможет вам решить накопившиеся проблемы.** Будьте внимательны к окружению — не упустите этот знак!",
+    "🔥 **Удача любит смелых!** Вечер в хорошей компании принесет вам неожиданное, но крайне выгодное предложение. Время действовать!",
+    "🚪 **Звезды говорят, что сегодня отличный день, чтобы рискнуть и попробовать что-то новое.** Шаг за пределы привычного откроет перед вами нужную дверь.",
+    "🤝 **В ближайшее время вас ждет знакомство, которое изменит ваши планы на ближайший месяц.** Будьте открыты к новым людям!",
+    "🌟 **Ваш внутренний магнетизм сегодня на пике!** Самое время оказаться в центре внимания и проявить себя.",
+    "🎁 **Судьба готовит вам приятный сюрприз.** Чтобы запустить цепочку счастливых событий, сделайте первый шаг навстречу новым впечатлениям уже сегодня.",
+    "🗝 **Тайна, которая вас беспокоила, откроется в непринужденной беседе.** Позвольте себе расслабиться и провести вечер среди единомышленников.",
+    "⚡️ **Ключ к вашему успеху на этой неделе — новые социальные связи.** Заведите разговор с тем, с кем давно хотели познакомиться.",
+    "🔋 **Интуиция подсказывает: пора отвлечься от рутины.** Смена обстановки и азарт игры подзарядят вашу энергию на 100%.",
+    "🏆 **Сегодня любой ваш риск превратится в триумф.** Доверьтесь случаю и не бойтесь быть в самом центре событий!"
+]
 
 
 # Состояния формы бронирования
@@ -66,7 +81,7 @@ async def main_menu_handler(callback: types.CallbackQuery, state: FSMContext):
 
     text = (
         "🎩 **Главное меню Joker Club**\n\n"
-        "Выберите интересующее мероприятие или подпишитесь на наш канал:"
+        "Выберите интересующее мероприятие, загляните к Оракулу или подпишитесь на наш канал:"
     )
     await callback.message.answer(
         text,
@@ -74,6 +89,42 @@ async def main_menu_handler(callback: types.CallbackQuery, state: FSMContext):
         parse_mode=ParseMode.MARKDOWN
     )
 
+
+# --- Раздел «Предсказания Оракула» ---
+
+@dp.callback_query(F.data == "oracle_start")
+async def oracle_start_handler(callback: types.CallbackQuery):
+    await callback.answer()
+    text = (
+        "🔮 **Оракул Joker Club готов открыть тайны судьбы...**\n\n"
+        "Доверьтесь своей интуиции и выберите **одну из трех карт**:"
+    )
+    await callback.message.answer(
+        text,
+        reply_markup=keyboards.get_oracle_cards_keyboard(),
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+
+@dp.callback_query(F.data.startswith("oracle_card_"))
+async def oracle_card_handler(callback: types.CallbackQuery):
+    await callback.answer()
+    card_num = callback.data.split("oracle_card_")[1]
+    prediction = random.choice(ORACLE_PREDICTIONS)
+
+    text = (
+        f"🎴 **Карта №{card_num} открыта!**\n\n"
+        f"📜 **Откровение Оракула:**\n\n"
+        f"{prediction}"
+    )
+    await callback.message.answer(
+        text,
+        reply_markup=keyboards.get_oracle_result_keyboard(),
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+
+# --- Рулетка и Мероприятия ---
 
 @dp.callback_query(F.data == "spin_slots")
 async def spin_slots_handler(callback: types.CallbackQuery):
