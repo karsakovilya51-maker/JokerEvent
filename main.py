@@ -1,4 +1,5 @@
 import os
+import time
 import asyncio
 import logging
 from aiohttp import web
@@ -14,6 +15,10 @@ logging.basicConfig(level=logging.INFO)
 
 bot = Bot(token=config.BOT_TOKEN)
 dp = Dispatcher()
+
+# Словарь для отслеживания времени последней игры {user_id: timestamp}
+user_cooldowns = {}
+COOLDOWN_SECONDS = 300  # Интервал в секундах (5 минут)
 
 
 # --- Хэндлеры бота ---
@@ -34,6 +39,27 @@ async def cmd_start(message: types.Message):
 
 @dp.callback_query(F.data == "spin_slots")
 async def spin_slots_handler(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    now = time.time()
+
+    # Проверка таймера на 5 минут
+    if user_id in user_cooldowns:
+        elapsed = now - user_cooldowns[user_id]
+        if elapsed < COOLDOWN_SECONDS:
+            remaining_seconds = int(COOLDOWN_SECONDS - elapsed)
+            minutes = remaining_seconds // 60
+            seconds = remaining_seconds % 60
+            
+            time_str = f"{minutes} мин {seconds} сек" if minutes > 0 else f"{seconds} сек"
+            
+            await callback.answer(
+                f"⏳ Испытать удачу снова можно через {time_str}!", 
+                show_alert=True
+            )
+            return
+
+    # Запоминаем время текущей попытки
+    user_cooldowns[user_id] = now
     await callback.answer()
     
     # Отправляем анимированный игровой автомат
