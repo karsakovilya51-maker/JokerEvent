@@ -22,6 +22,14 @@ dp = Dispatcher()
 user_cooldowns = {}
 COOLDOWN_SECONDS = 300
 
+# Понятные названия категорий для карточки заявки
+CATEGORY_NAMES = {
+    "mafia": "Мафия Чикаго 30-х",
+    "chgk": "Что? Где? Когда?",
+    "lecture_movie": "Лекция / Кино",
+    "speed_dating": "Скоростные свидания (10 девушек за 1 час)",
+}
+
 
 # Состояния формы бронирования
 class BookingForm(StatesGroup):
@@ -37,15 +45,32 @@ async def cmd_id(message: types.Message):
 
 
 @dp.message(CommandStart())
-async def cmd_start(message: types.Message):
+async def cmd_start(message: types.Message, state: FSMContext):
+    await state.clear()
     text = (
         "🎩 **Добро пожаловать в Joker Club!**\n\n"
-        "Подпишитесь на наш канал и испытайте удачу в бесплатной "
-        "лотерее, чтобы забрать свой гарантированный бонус на ближайшую игру!"
+        "Испытайте удачу в бесплатной лотерее, "
+        "чтобы забрать свой гарантированный бонус на ближайшую игру!"
     )
     await message.answer(
         text,
-        reply_markup=keyboards.get_subscription_keyboard(config.CHANNEL_URL),
+        reply_markup=keyboards.get_start_keyboard(),
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+
+@dp.callback_query(F.data == "main_menu")
+async def main_menu_handler(callback: types.CallbackQuery, state: FSMContext):
+    await state.clear()
+    await callback.answer()
+
+    text = (
+        "🎩 **Главное меню Joker Club**\n\n"
+        "Выберите интересующее мероприятие или подпишитесь на наш канал:"
+    )
+    await callback.message.answer(
+        text,
+        reply_markup=keyboards.get_categories_keyboard(),
         parse_mode=ParseMode.MARKDOWN
     )
 
@@ -110,15 +135,48 @@ async def spin_slots_handler(callback: types.CallbackQuery):
 @dp.callback_query(F.data.startswith("category_"))
 async def category_handler(callback: types.CallbackQuery):
     await callback.answer()
-    category = callback.data.split("_")[1]
+    category = callback.data.split("category_")[1]
 
-    text = (
-        "🔥 **Ближайшее мероприятие: Мафия Чикаго 30-х**\n"
-        "📅 **Пятница, 19:30 | Ресторан 'Gatsby's'**\n\n"
-        "🎟 Обычный билет: 1200 ₽\n"
-        "🔥 **Цена для вас (со скидкой): 900 ₽**\n\n"
-        "_Скидка забронирована за вами на 24 часа._"
-    )
+    if category == "mafia":
+        text = (
+            "🔥 **Ближайшее мероприятие: Мафия Чикаго 30-х**\n"
+            "📅 **Пятница, 19:30 | Ресторан 'Gatsby's'**\n\n"
+            "🎟 Обычный билет: 1200 ₽\n"
+            "🔥 **Цена для вас (со скидкой): 900 ₽**\n\n"
+            "_Скидка забронирована за вами на 24 часа._"
+        )
+    elif category == "chgk":
+        text = (
+            "🧠 **Ближайшее мероприятие: Что? Где? Когда?**\n"
+            "📅 **Суббота, 18:00 | Ресторан 'Gatsby's'**\n\n"
+            "🎟 Обычный билет: 1000 ₽\n"
+            "🔥 **Цена для вас (со скидкой): 700 ₽**\n\n"
+            "_Скидка забронирована за вами на 24 часа._"
+        )
+    elif category == "lecture_movie":
+        text = (
+            "🎬 **Ближайшее мероприятие: Лекция / Кино**\n"
+            "📅 **Воскресенье, 17:00 | Joker Club**\n\n"
+            "🎟 Обычный билет: 800 ₽\n"
+            "🔥 **Цена для вас (со скидкой): 500 ₽**\n\n"
+            "_Скидка забронирована за вами на 24 часа._"
+        )
+    elif category == "speed_dating":
+        text = (
+            "💘 **Ближайшее мероприятие: Скоростные свидания**\n"
+            "🔥 **10 девушек за 1 час!**\n"
+            "📅 **Суббота, 20:00 | Joker Club**\n\n"
+            "🎟 Обычный билет: 1500 ₽\n"
+            "🔥 **Цена для вас (со скидкой): 1200 ₽**\n\n"
+            "_Скидка забронирована за вами на 24 часа._"
+        )
+    else:
+        text = (
+            "✨ **Ближайшее мероприятие Joker Club**\n\n"
+            "🔥 **Цена для вас со скидкой активна!**\n\n"
+            "_Скидка забронирована за вами на 24 часа._"
+        )
+
     await callback.message.answer(
         text,
         reply_markup=keyboards.get_booking_keyboard(category),
@@ -131,7 +189,7 @@ async def category_handler(callback: types.CallbackQuery):
 @dp.callback_query(F.data.startswith("buy_"))
 async def buy_handler(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
-    category = callback.data.split("_")[1]
+    category = callback.data.split("buy_")[1]
 
     await state.update_data(category=category)
     await state.set_state(BookingForm.waiting_for_phone)
@@ -152,7 +210,8 @@ async def process_phone_step(message: types.Message, state: FSMContext):
         phone = message.text
 
     user_data = await state.get_data()
-    category = user_data.get("category", "Не указана")
+    category_code = user_data.get("category", "Не указана")
+    category_name = CATEGORY_NAMES.get(category_code, category_code)
     await state.clear()
 
     username_str = f"@{message.from_user.username}" if message.from_user.username else "без username"
@@ -160,10 +219,10 @@ async def process_phone_step(message: types.Message, state: FSMContext):
         f"🔥 **НОВЫЙ ГОСТЬ И ЗАЯВКА НА БРОНЬ!**\n\n"
         f"👤 **Гость:** {message.from_user.full_name} ({username_str})\n"
         f"📞 **Телефон:** `{phone}`\n"
-        f"🎯 **Категория:** {category}"
+        f"🎯 **Категория:** {category_name}"
     )
 
-    # Пересылаем карточку гостя в группу
+    # Пересылаем карточку гостя в рабочий чат
     target_chat = config.CHANNEL_ID or config.ADMIN_ID
     if target_chat:
         try:
@@ -171,7 +230,7 @@ async def process_phone_step(message: types.Message, state: FSMContext):
         except Exception as e:
             logging.error(f"Ошибка отправки лида в чат {target_chat}: {e}")
 
-    # Сообщение с подтверждением гостю
+    # Подтверждение гостю
     user_text = (
         "✅ **Заявка зарегистрирована!**\n\n"
         "Перейдите в рабочий чат проекта и напишите организатору:\n"
@@ -184,7 +243,7 @@ async def process_phone_step(message: types.Message, state: FSMContext):
     )
 
 
-# --- Веб-сервер для Render ---
+# --- Веб-сервер для поддержки активности на Render ---
 
 async def handle_ping(request):
     return web.Response(text="OK", status=200)
