@@ -1,143 +1,129 @@
 import os
 import asyncio
 import logging
-from datetime import datetime, timedelta
-
 from aiohttp import web
-from aiogram import Bot, Dispatcher, F
-from aiogram.enums import ParseMode, ChatMemberStatus
-from aiogram.filters import CommandStart, CommandObject
-from aiogram.types import Message, CallbackQuery
-from aiogram.client.default import DefaultBotProperties
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+from aiogram import Bot, Dispatcher, F, types
+from aiogram.filters import CommandStart
+from aiogram.enums import ParseMode
 
 import config
 import keyboards
 
 logging.basicConfig(level=logging.INFO)
 
-bot = Bot(token=config.BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+bot = Bot(token=config.BOT_TOKEN)
 dp = Dispatcher()
-scheduler = AsyncIOScheduler()
 
-# Обработчик для проверки состояния сервиса на Render (Health Check)
-async def handle_health_check(request):
-    return web.Response(text="Bot is running OK")
 
-async def is_user_subscribed(user_id: int) -> bool:
-    try:
-        member = await bot.get_chat_member(chat_id=config.CHANNEL_ID, user_id=user_id)
-        return member.status not in (ChatMemberStatus.LEFT, ChatMemberStatus.KICKED)
-    except Exception as e:
-        logging.error(f"Ошибка проверки подписки: {e}")
-        return False
-
-async def send_followup_message(user_id: int):
-    text = (
-        "⏳ <b>Ваш промокод сгорит через несколько часов!</b>\n\n"
-        "Вы еще можете успеть забронировать стол со скидкой 300 ₽ на ближайшую игру.\n"
-        "Атмосфера, стильные фото и отличная компания гарантированы!"
-    )
-    try:
-        await bot.send_message(chat_id=user_id, text=text)
-    except Exception as e:
-        logging.error(f"Не удалось отправить догрев: {e}")
+# --- Хэндлеры бота ---
 
 @dp.message(CommandStart())
-async def cmd_start(message: Message, command: CommandObject):
-    source = command.args if command.args else "direct"
-    logging.info(f"Пользователь {message.from_user.id} зашел с источника: {source}")
-
+async def cmd_start(message: types.Message):
     text = (
-        f"Привет, {message.from_user.first_name}! 👋\n\n"
-        "Мы организуем атмосферные вечера в заведениях города: от гангстерской Мафии до интеллектуальных битв.\n\n"
-        "🎁 <b>Ваш промокод на 300 ₽ почти готов!</b>\n"
-        "Чтобы активировать скидку, подпишитесь на наш основной Telegram-канал с анонсами."
+        "🎩 **Добро пожаловать в Joker Club!**\n\n"
+        "Подпишитесь на наш канал и испытайте удачу в бесплатной "
+        "лотерее, чтобы забрать свой гарантированный бонус на ближайшую игру!"
     )
     await message.answer(
-        text=text,
-        reply_markup=keyboards.get_subscription_keyboard(config.CHANNEL_URL)
+        text,
+        reply_markup=keyboards.get_subscription_keyboard(config.CHANNEL_URL),
+        parse_mode=ParseMode.MARKDOWN
     )
 
-@dp.callback_query(F.data == "check_subscription")
-async def process_check_subscription(callback: CallbackQuery):
-    user_id = callback.from_user.id
-    if await is_user_subscribed(user_id):
-        await callback.answer("Подтверждено! Скидка активирована 🎉")
+
+@dp.callback_query(F.data == "spin_slots")
+async def spin_slots_handler(callback: types.CallbackQuery):
+    await callback.answer()
+    
+    # Отправляем анимированный игровой автомат
+    msg = await callback.message.answer_dice(emoji="🎰")
+    
+    # Задержка 2.5 секунды для просмотра анимации вращения
+    await asyncio.sleep(2.5)
+    
+    val = msg.dice.value
+    
+    # Распределение беспроигрышных призов по значениям комбинации
+    if val == 64:
         text = (
-            "✅ <b>Подписка подтверждена!</b>\n"
-            "Ваш промокод: <code>GANGSTER2026</code> (дает скидку 300 ₽).\n\n"
-            "Отметьте, какие мероприятия вам наиболее интересны:"
+            "🔥 **ДЖЕКПОТ! ТРИ СЕМЕРКИ!** 🔥\n\n"
+            "Невероятная удача! Вы выбили максимальный куш:\n"
+            "🎁 **Скидка 500 ₽** на билет + **Welcome-drink** на баре!\n\n"
+            "Выберите мероприятие для бронирования:"
         )
-        await callback.message.edit_text(
-            text=text,
-            reply_markup=keyboards.get_categories_keyboard()
+    elif val in [1, 22, 43]:
+        text = (
+            "🎉 **СУПЕР-ВЫИГРЫШ!** 🎉\n\n"
+            "Отличная комбинация! Сегодня удача на вашей стороне:\n"
+            "🎁 Ваш бонус: **Скидка 400 ₽** на входной билет!\n\n"
+            "Выберите мероприятие для бронирования:"
         )
     else:
-        await callback.answer(
-            "❌ Вы еще не подписались на канал! Подпишитесь и нажмите кнопку снова.", 
-            show_alert=True
+        text = (
+            "🃏 **ВЫ В ИГРЕ!** 🃏\n\n"
+            "В клубе Джокера проигравших не бывает!\n"
+            "🎁 Вы выиграли гарантированную **скидку 300 ₽** на ближайший вечер!\n\n"
+            "Выберите мероприятие для бронирования:"
         )
+        
+    await callback.message.answer(
+        text, 
+        reply_markup=keyboards.get_categories_keyboard(),
+        parse_mode=ParseMode.MARKDOWN
+    )
+
 
 @dp.callback_query(F.data.startswith("category_"))
-async def process_category_selection(callback: CallbackQuery):
+async def category_handler(callback: types.CallbackQuery):
+    await callback.answer()
     category = callback.data.split("_")[1]
-    user_id = callback.from_user.id
-
-    events_info = {
-        "mafia": "🕵️ <b>Мафия в стиле Чикаго 30-х</b>\n📅 Пятница, 19:30 | Ресторан 'Gatsbys'\nДресс-код, фотограф, атмосферная музыка.",
-        "chgk": "🧠 <b>Что? Где? Когда?</b>\n📅 Четверг, 19:00 | Бар 'Шерлок'\nИнтеллектуальная битва для команд и соло-игроков.",
-        "lectures": "🎓 <b>Лекция: Тайны истории кино</b>\n📅 Воскресенье, 17:00 | Кофейня 'Модерн'\nУвлекательный разбор от эксперта.",
-        "all": "🔥 <b>Ближайшее мероприятие: Мафия Чикаго 30-х</b>\n📅 Пятница, 19:30 | Ресторан 'Gatsbys'"
-    }
-
-    selected_text = events_info.get(category, events_info["all"])
     
     text = (
-        f"{selected_text}\n\n"
-        "🎟 <b>Обычный билет:</b> 1200 ₽\n"
-        "🔥 <b>Цена для вас (со скидкой 300 ₽):</b> 900 ₽\n\n"
-        "<i>Скидка забронирована за вами на 24 часа.</i>"
+        "🔥 **Ближайшее мероприятие: Мафия Чикаго 30-х**\n"
+        "📅 **Пятница, 19:30 | Ресторан 'Gatsby's'**\n\n"
+        "🎟 Обычный билет: 1200 ₽\n"
+        "🔥 **Цена для вас (со скидкой): 900 ₽**\n\n"
+        "_Скидка забронирована за вами на 24 часа._"
+    )
+    await callback.message.answer(
+        text,
+        reply_markup=keyboards.get_booking_keyboard(category),
+        parse_mode=ParseMode.MARKDOWN
     )
 
-    await callback.message.edit_text(
-        text=text,
-        reply_markup=keyboards.get_booking_keyboard(category)
-    )
-
-    scheduler.add_job(
-        send_followup_message,
-        trigger="date",
-        run_date=datetime.now() + timedelta(hours=2),
-        args=[user_id],
-        id=f"followup_{user_id}",
-        replace_existing=True
-    )
 
 @dp.callback_query(F.data.startswith("buy_"))
-async def process_buy(callback: CallbackQuery):
-    user_id = callback.from_user.id
-    if scheduler.get_job(f"followup_{user_id}"):
-        scheduler.remove_job(f"followup_{user_id}")
-
+async def buy_handler(callback: types.CallbackQuery):
+    await callback.answer("Заявка принята!", show_alert=True)
     await callback.message.answer(
-        "🎉 <b>Менеджер свяжется с вами в течение 5 минут для подтверждения брони!</b>"
+        "🎉 **Менеджер свяжется с вами в течение 5 минут для подтверждения брони!**"
     )
-    await callback.answer()
+
+
+# --- Веб-сервер для поддержки активности (UptimeRobot / Render Ping) ---
+
+async def handle_ping(request):
+    return web.Response(text="OK", status=200)
+
 
 async def main():
-    # Запуск легкого веб-сервера для закрытия порта на Render
+    # Запуск поллинга бота в фоновом режиме
+    asyncio.create_task(dp.start_polling(bot))
+    
+    # Запуск веб-сервера aiohttp для ответа на пинг от UptimeRobot
     app = web.Application()
-    app.router.add_get('/', handle_health_check)
+    app.router.add_get("/", handle_ping)
+    
+    port = int(os.getenv("PORT", 8080))
     runner = web.AppRunner(app)
     await runner.setup()
-    port = int(os.getenv("PORT", 8080))
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
+    
+    # Удержание процесса в активном состоянии
+    await asyncio.Event().wait()
 
-    scheduler.start()
-    logging.info("Бот успешно запущен!")
-    await dp.start_polling(bot)
 
 if __name__ == "__main__":
     asyncio.run(main())
