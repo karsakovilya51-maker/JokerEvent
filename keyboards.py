@@ -31,16 +31,14 @@ def get_oracle_cards_keyboard():
     builder.button(text="🎴 Карта 2", callback_data="oracle_card_2")
     builder.button(text="🎴 Карта 3", callback_data="oracle_card_3")
     builder.button(text="🏠 Главное меню", callback_data="main_menu")
-    builder.adjust(3, 1)  # Три карты в ряд, кнопка меню снизу
+    builder.adjust(3, 1)
     return builder.as_markup()
 
 
 def get_oracle_result_keyboard():
-    """Клавиатура после выдачи предсказания"""
+    """Клавиатура после выдачи предсказания (только кнопка Главного меню)"""
     builder = InlineKeyboardBuilder()
-    builder.button(text="🔮 Выбрать другую карту", callback_data="oracle_start")
     builder.button(text="🏠 Главное меню", callback_data="main_menu")
-    builder.adjust(1)
     return builder.as_markup()
 
 
