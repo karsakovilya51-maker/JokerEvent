@@ -1,4 +1,5 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+import config
 
 def get_subscription_keyboard(channel_url: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
@@ -11,17 +12,30 @@ def get_subscription_keyboard(channel_url: str) -> InlineKeyboardMarkup:
 def get_categories_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="🕵️ Мафия в стиле Чикаго 30-х", callback_data="category_mafia")],
+            [InlineKeyboardButton(text="🕵️ Мафия Чикаго", callback_data="category_mafia")],
             [InlineKeyboardButton(text="🧠 Что? Где? Когда?", callback_data="category_chgk")],
-            [InlineKeyboardButton(text="🎓 Образовательные лекции", callback_data="category_lectures")],
-            [InlineKeyboardButton(text="🔥 Интересно всё!", callback_data="category_all")]
+            [InlineKeyboardButton(text="🎓 Лекции и кино", callback_data="category_lectures")],
+            [InlineKeyboardButton(text="🔥 Показать все варианты", callback_data="category_all")]
         ]
     )
 
-def get_booking_keyboard(event_code: str) -> InlineKeyboardMarkup:
+def get_booking_keyboard(category: str) -> InlineKeyboardMarkup:
+    # Используется ссылка из config.py или ссылка по умолчанию
+    support_url = getattr(config, 'SUPPORT_CHAT_URL', 'https://t.me/JokerLaunchRostov')
+
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="🎟 Забронировать место (900 ₽)", callback_data=f"buy_{event_code}")],
-            [InlineKeyboardButton(text="❓ Задать вопрос организатору", url="https://t.me/your_admin_contact")]
+            [
+                InlineKeyboardButton(
+                    text="🎟 Забронировать место (900 ₽)", 
+                    callback_data=f"buy_{category}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="❓ Задать вопрос организатору", 
+                    url=support_url
+                )
+            ]
         ]
     )
