@@ -7,6 +7,9 @@ from aiohttp import web
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import CommandStart
 from aiogram.enums import ParseMode
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.fsm.context import FSMContext
+from aiogram.types import ReplyKeyboardRemove
 
 import config
 import keyboards
@@ -16,9 +19,13 @@ logging.basicConfig(level=logging.INFO)
 bot = Bot(token=config.BOT_TOKEN)
 dp = Dispatcher()
 
-# Словарь для отслеживания времени последней игры {user_id: timestamp}
+# Кулдаун лотереи
 user_cooldowns = {}
-COOLDOWN_SECONDS = 300  # Интервал в секундах (5 минут)
+COOLDOWN_SECONDS = 300
+
+# Состояния формы бронирования
+class BookingForm(StatesGroup):
+    waiting_for_phone = State()
 
 
 # --- Хэндлеры бота ---
@@ -42,7 +49,6 @@ async def spin_slots_handler(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     now = time.time()
 
-    # Проверка таймера на 5 минут
     if user_id in user_cooldowns:
         elapsed = now - user_cooldowns[user_id]
         if elapsed < COOLDOWN_SECONDS:
@@ -58,19 +64,14 @@ async def spin_slots_handler(callback: types.CallbackQuery):
             )
             return
 
-    # Запоминаем время текущей попытки
     user_cooldowns[user_id] = now
     await callback.answer()
     
-    # Отправляем анимированный игровой автомат
     msg = await callback.message.answer_dice(emoji="🎰")
-    
-    # Задержка 2.5 секунды для просмотра анимации вращения
     await asyncio.sleep(2.5)
     
     val = msg.dice.value
     
-    # Распределение беспроигрышных призов по значениям комбинации
     if val == 64:
         text = (
             "🔥 **ДЖЕКПОТ! ТРИ СЕМЕРКИ!** 🔥\n\n"
@@ -119,11 +120,65 @@ async def category_handler(callback: types.CallbackQuery):
     )
 
 
+# --- Пошаговый сценарий бронирования ---
+
 @dp.callback_query(F.data.startswith("buy_"))
-async def buy_handler(callback: types.CallbackQuery):
-    await callback.answer("Заявка принята!", show_alert=True)
+async def buy_handler(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
+    category = callback.data.split("_")[1]
+    
+    # Сохраняем выбранную категорию в FSM
+    await state.update_data(category=category)
+    await state.set_state(BookingForm.waiting_for_phone)
+    
     await callback.message.answer(
-        "🎉 **Менеджер свяжется с вами в течение 5 минут для подтверждения брони!**"
+        "📱 **Укажите ваш номер телефона для фиксации брони:**\n\n"
+        "Нажмите кнопку ниже, чтобы поделиться контактом, или введите номер вручную в чат:",
+        reply_markup=keyboards.get_phone_keyboard(),
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+
+@dp.message(BookingForm.waiting_for_phone)
+async def process_phone_step(message: types.Message, state: FSMContext):
+    # Получаем телефон из кнопки контакта или из текстового сообщения
+    if message.contact:
+        phone = message.contact.phone_number
+    else:
+        phone = message.text
+
+    user_data = await state.get_data()
+    category = user_data.get("category", "Не указана")
+    await state.clear()
+
+    # 1. Отправляем уведомление организатору (ADMIN_ID)
+    if config.ADMIN_ID:
+        try:
+            username_str = f"@{message.from_user.username}" if message.from_user.username else "без username"
+            admin_text = (
+                f"🔥 **НОВЫЙ ГОСТЬ И ЗАЯВКА НА БРОНЬ!**\n\n"
+                f"👤 **Гость:** {message.from_user.full_name} ({username_str})\n"
+                f"📞 **Телефон:** `{phone}`\n"
+                f"🎯 **Категория:** {category}"
+            )
+            await bot.send_message(chat_id=config.ADMIN_ID, text=admin_text, parse_mode=ParseMode.MARKDOWN)
+        except Exception as e:
+            logging.error(f"Ошибка отправки сообщения организатору: {e}")
+
+    # 2. Убираем кнопкой клавиатуру ввода телефона
+    remove_msg = await message.answer("...", reply_markup=ReplyKeyboardRemove())
+    await remove_msg.delete()
+
+    # 3. Инструкция для пользователя
+    user_text = (
+        "✅ **Заявка зарегистрирована!**\n\n"
+        "Перейдите в личные сообщения к организатору и напишите ему:\n"
+        "👉 **«Хочу забронировать место»**"
+    )
+    await message.answer(
+        user_text,
+        reply_markup=keyboards.get_organizer_redirect_keyboard(),
+        parse_mode=ParseMode.MARKDOWN
     )
 
 
@@ -134,10 +189,8 @@ async def handle_ping(request):
 
 
 async def main():
-    # Запуск поллинга бота в фоновом режиме
     asyncio.create_task(dp.start_polling(bot))
     
-    # Запуск веб-сервера aiohttp для ответа на пинг от UptimeRobot
     app = web.Application()
     app.router.add_get("/", handle_ping)
     
@@ -147,7 +200,6 @@ async def main():
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
     
-    # Удержание процесса в активном состоянии
     await asyncio.Event().wait()
 
 
