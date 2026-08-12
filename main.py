@@ -19,9 +19,13 @@ logging.basicConfig(level=logging.INFO)
 bot = Bot(token=config.BOT_TOKEN)
 dp = Dispatcher()
 
-# Кулдаун лотереи
+# Кулдаун лотереи (5 минут = 300 секунд)
 user_cooldowns = {}
 COOLDOWN_SECONDS = 300
+
+# Кулдаун Оракула (60 минут = 3600 секунд)
+oracle_cooldowns = {}
+ORACLE_COOLDOWN_SECONDS = 3600
 
 # Понятные названия категорий для карточки заявки
 CATEGORY_NAMES = {
@@ -94,6 +98,25 @@ async def main_menu_handler(callback: types.CallbackQuery, state: FSMContext):
 
 @dp.callback_query(F.data == "oracle_start")
 async def oracle_start_handler(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    now = time.time()
+
+    # Проверка лимита в 60 минут
+    if user_id in oracle_cooldowns:
+        elapsed = now - oracle_cooldowns[user_id]
+        if elapsed < ORACLE_COOLDOWN_SECONDS:
+            remaining_seconds = int(ORACLE_COOLDOWN_SECONDS - elapsed)
+            minutes = remaining_seconds // 60
+            seconds = remaining_seconds % 60
+
+            time_str = f"{minutes} мин {seconds} сек" if minutes > 0 else f"{seconds} сек"
+
+            await callback.answer(
+                f"⏳ Оракулу нужно время! Следующее гадание доступно через {time_str}.",
+                show_alert=True
+            )
+            return
+
     await callback.answer()
     text = (
         "🔮 **Оракул Joker Club готов открыть тайны судьбы...**\n\n"
@@ -108,7 +131,13 @@ async def oracle_start_handler(callback: types.CallbackQuery):
 
 @dp.callback_query(F.data.startswith("oracle_card_"))
 async def oracle_card_handler(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    now = time.time()
+
+    # Фиксируем время гадания
+    oracle_cooldowns[user_id] = now
     await callback.answer()
+
     card_num = callback.data.split("oracle_card_")[1]
     prediction = random.choice(ORACLE_PREDICTIONS)
 
@@ -191,7 +220,8 @@ async def category_handler(callback: types.CallbackQuery):
     if category == "mafia":
         text = (
             "🔥 **Ближайшее мероприятие: Мафия Чикаго 30-х**\n"
-            "📅 **Пятница, 19:30 | Ресторан 'Gatsby's'**\n\n"
+            "📅 **Каждый вторник, 19:00**\n"
+            "📍 **Адрес:** ул. Темерницкая, 33 (антикафе 'Бамбук')\n\n"
             "🎟 Обычный билет: 1200 ₽\n"
             "🔥 **Цена для вас (со скидкой): 900 ₽**\n\n"
             "_Скидка забронирована за вами на 24 часа._"
@@ -199,7 +229,8 @@ async def category_handler(callback: types.CallbackQuery):
     elif category == "chgk":
         text = (
             "🧠 **Ближайшее мероприятие: Что? Где? Когда?**\n"
-            "📅 **Суббота, 18:00 | Ресторан 'Gatsby's'**\n\n"
+            "📅 **Время:** уточняйте у организатора\n"
+            "📍 **Адрес:** ул. Темерницкая, 33 (антикафе 'Бамбук')\n\n"
             "🎟 Обычный билет: 1000 ₽\n"
             "🔥 **Цена для вас (со скидкой): 700 ₽**\n\n"
             "_Скидка забронирована за вами на 24 часа._"
@@ -207,7 +238,8 @@ async def category_handler(callback: types.CallbackQuery):
     elif category == "lecture_movie":
         text = (
             "🎬 **Ближайшее мероприятие: Лекция / Кино**\n"
-            "📅 **Воскресенье, 17:00 | Joker Club**\n\n"
+            "📅 **Время:** уточняйте у организатора\n"
+            "📍 **Адрес:** ул. Темерницкая, 33 (антикафе 'Бамбук')\n\n"
             "🎟 Обычный билет: 800 ₽\n"
             "🔥 **Цена для вас (со скидкой): 500 ₽**\n\n"
             "_Скидка забронирована за вами на 24 часа._"
@@ -216,14 +248,16 @@ async def category_handler(callback: types.CallbackQuery):
         text = (
             "💘 **Ближайшее мероприятие: Скоростные свидания**\n"
             "🔥 **10 девушек за 1 час!**\n"
-            "📅 **Суббота, 20:00 | Joker Club**\n\n"
+            "📅 **Каждый четверг, 19:00**\n"
+            "📍 **Адрес:** ул. Темерницкая, 33 (антикафе 'Бамбук')\n\n"
             "🎟 Обычный билет: 1500 ₽\n"
             "🔥 **Цена для вас (со скидкой): 1200 ₽**\n\n"
             "_Скидка забронирована за вами на 24 часа._"
         )
     else:
         text = (
-            "✨ **Ближайшее мероприятие Joker Club**\n\n"
+            "✨ **Ближайшее мероприятие Joker Club**\n"
+            "📍 **Адрес:** ул. Темерницкая, 33 (антикафе 'Бамбук')\n\n"
             "🔥 **Цена для вас со скидкой активна!**\n\n"
             "_Скидка забронирована за вами на 24 часа._"
         )
