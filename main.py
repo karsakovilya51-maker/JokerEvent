@@ -3,10 +3,11 @@ import time
 import random
 import asyncio
 import logging
+from datetime import datetime, timezone, timedelta
 from aiohttp import web
 
 from aiogram import Bot, Dispatcher, F, types
-from aiogram.filters import CommandStart, Command
+from aiogram.filters import CommandStart, Command, CommandObject
 from aiogram.enums import ParseMode
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
@@ -59,13 +60,38 @@ class BookingForm(StatesGroup):
 
 @dp.message(Command("id"))
 async def cmd_id(message: types.Message):
-    """Команда для быстрого получения ID группы"""
-    await message.answer(f"🆔 ID этого чата: `{message.chat.id}`", parse_mode=ParseMode.MARKDOWN)
+    """Команда для быстрого получения ID пользователя/чата"""
+    await message.answer(f"🆔 Ваш Telegram ID: `{message.chat.id}`", parse_mode=ParseMode.MARKDOWN)
 
 
 @dp.message(CommandStart())
-async def cmd_start(message: types.Message, state: FSMContext):
+async def cmd_start(message: types.Message, command: CommandObject, state: FSMContext):
     await state.clear()
+
+    # 1. Логирование перехода по QR-коду / старту бота
+    msk_tz = timezone(timedelta(hours=3))
+    now_str = datetime.now(msk_tz).strftime("%d.%m.%Y %H:%M:%S")
+
+    username_str = f"@{message.from_user.username}" if message.from_user.username else "без username"
+    start_tag = command.args if command.args else "Обычный запуск / QR"
+
+    log_text = (
+        f"📲 **НОВЫЙ ПЕРЕХОД ПО QR-КОДУ / В БОТА!**\n\n"
+        f"📅 **Дата и время:** `{now_str} (МСК)`\n"
+        f"👤 **Имя:** {message.from_user.full_name}\n"
+        f"🏷 **Юзернейм:** {username_str}\n"
+        f"🆔 **ID:** `{message.from_user.id}`\n"
+        f"🔗 **Метка / Источник:** `{start_tag}`"
+    )
+
+    # Отправка лога в личные сообщения администратору
+    if config.ADMIN_ID:
+        try:
+            await bot.send_message(chat_id=config.ADMIN_ID, text=log_text, parse_mode=ParseMode.MARKDOWN)
+        except Exception as e:
+            logging.error(f"Ошибка отправки лога входа администратору: {e}")
+
+    # 2. Ответ пользователю
     text = (
         "🎩 **Добро пожаловать в Joker Club!**\n\n"
         "Испытайте удачу в бесплатной лотерее, "
